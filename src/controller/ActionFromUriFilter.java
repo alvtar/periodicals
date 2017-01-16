@@ -1,0 +1,123 @@
+package controller;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import org.apache.log4j.Logger;
+import action.Action;
+import action.LoginAction;
+import action.LogoutAction;
+import action.MainAction;
+import action.PublicationListAction;
+import action.PublicationSearchAction;
+import action.PublicationSearchResultAction;
+import action.SubscriptionListAction;
+import action.admin.ProfileChangePasswordAction;
+import action.admin.ProfilePasswordSaveAction;
+import action.admin.PublicationDeleteAction;
+import action.admin.PublicationEditAction;
+import action.admin.PublicationSaveAction;
+import action.admin.UserDeleteAction;
+import action.admin.UserEditAction;
+import action.admin.UserListAction;
+import action.admin.UserSaveAction;
+import action.subscriber.PublicationSubscriberListAction;
+import action.subscriber.SubscriberProfileEditAction;
+import action.subscriber.SubscriberProfileSaveAction;
+import action.subscriber.SubscriberRegisterAction;
+import action.subscriber.SubscriptionAddAction;
+import action.subscriber.SubscriptionSaveAction;
+import action.subscriber.SubscriptionUserListAction;
+
+public class ActionFromUriFilter implements Filter {
+    private static Logger logger = Logger.getLogger(ActionFromUriFilter.class);
+
+    private static Map<String, Class<? extends Action>> actions = new ConcurrentHashMap<>();
+
+    static {
+        actions.put("/", MainAction.class);
+        actions.put("/index", MainAction.class);
+        actions.put("/login", LoginAction.class);
+        actions.put("/logout", LogoutAction.class);
+
+        actions.put("/profile/edit", ProfileChangePasswordAction.class);
+        actions.put("/profile/save", ProfilePasswordSaveAction.class);
+
+        actions.put("/profile/subscriber_edit", SubscriberProfileEditAction.class);
+        actions.put("/profile/subscriber_save", SubscriberProfileSaveAction.class);
+        actions.put("/profile/subscriber_register", SubscriberRegisterAction.class);
+
+        actions.put("/user/list", UserListAction.class);
+        actions.put("/user/edit", UserEditAction.class);
+        actions.put("/user/save", UserSaveAction.class);
+        actions.put("/user/delete", UserDeleteAction.class);
+
+        actions.put("/publication/list", PublicationListAction.class);
+        actions.put("/publication/edit", PublicationEditAction.class);
+        actions.put("/publication/save", PublicationSaveAction.class);
+        actions.put("/search/publication/form", PublicationSearchAction.class);
+        actions.put("/search/publication/result", PublicationSearchResultAction.class);
+
+        actions.put("/publication/delete", PublicationDeleteAction.class);
+
+        actions.put("/subscription/list", SubscriptionListAction.class);
+
+        actions.put("/subscription/user_list", SubscriptionUserListAction.class);
+
+        actions.put("/publication/subscriber_list", PublicationSubscriberListAction.class);
+
+        actions.put("/subscription/add", SubscriptionAddAction.class);
+        actions.put("/subscription/save", SubscriptionSaveAction.class);
+
+    }
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        if (request instanceof HttpServletRequest) {
+            HttpServletRequest httpRequest = (HttpServletRequest) request;
+            String contextPath = httpRequest.getContextPath();
+            String uri = httpRequest.getRequestURI();
+            logger.debug(String.format("Starting of processing of request for URI \"%s\"", uri));
+            int beginAction = contextPath.length();
+            int endAction = uri.lastIndexOf('.');
+            String actionName;
+            if (endAction >= 0) {
+                actionName = uri.substring(beginAction, endAction);
+            } else {
+                actionName = uri.substring(beginAction);
+            }
+            Class<? extends Action> actionClass = actions.get(actionName);
+            try {
+                Action action = actionClass.newInstance();
+                action.setName(actionName);
+                httpRequest.setAttribute("action", action);
+                chain.doFilter(request, response);
+            } catch (InstantiationException | IllegalAccessException | NullPointerException e) {
+                logger.error("It is impossible to create action handler object", e);
+                httpRequest.setAttribute("error",
+                        String.format("Запрошенный адрес %s не может быть обработан сервером", uri));
+                httpRequest.getServletContext().getRequestDispatcher("/WEB-INF/jsp/error.jsp").forward(request,
+                        response);
+            }
+        } else {
+            logger.error("It is impossible to use HTTP filter");
+            request.getServletContext().getRequestDispatcher("/WEB-INF/jsp/error.jsp").forward(request, response);
+        }
+    }
+
+    @Override
+    public void destroy() {
+    }
+}
